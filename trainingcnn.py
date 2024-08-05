@@ -7,47 +7,58 @@ Original file is located at
     https://colab.research.google.com/drive/186LxAqOaoJrnslbmWMPK3sxqUgUoXcWw
 """
 
+import torch
 import torch.nn as nn
 import torch.optim as optim
 import torchvision
 import torchvision.transforms as transforms
-import torch.nn.functional as F # Import the necessary module
+import torch.nn.functional as F
 
-# Define a simple CNN model
-class SimpleCNN(nn.Module):
+# Define a more complex CNN model with more layers
+class EnhancedCNN(nn.Module):
     def __init__(self):
-        super(SimpleCNN, self).__init__()
-        self.conv1 = nn.Conv2d(3, 6, 5)
+        super(EnhancedCNN, self).__init__()
+        self.conv1 = nn.Conv2d(3, 32, 3, padding=1)  # Increase number of filters
+        self.conv2 = nn.Conv2d(32, 64, 3, padding=1) # Increase number of filters
+        self.conv3 = nn.Conv2d(64, 128, 3, padding=1) # Additional convolutional layer
         self.pool = nn.MaxPool2d(2, 2)
-        self.conv2 = nn.Conv2d(6, 16, 5)
-        self.fc1 = nn.Linear(16 * 5 * 5, 120)
-        self.fc2 = nn.Linear(120, 84)
-        self.fc3 = nn.Linear(84, 10)
+        self.fc1 = nn.Linear(128 * 4 * 4, 256)  # Adjust input dimensions
+        self.fc2 = nn.Linear(256, 128)  # Adjust hidden layer dimensions
+        self.fc3 = nn.Linear(128, 10)
 
     def forward(self, x):
-        x = self.pool(F.relu(self.conv1(x))) # Now F is defined
+        x = self.pool(F.relu(self.conv1(x)))
         x = self.pool(F.relu(self.conv2(x)))
-        x = x.view(-1, 16 * 5 * 5)
+        x = self.pool(F.relu(self.conv3(x)))
+        x = x.view(-1, 128 * 4 * 4)
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
         x = self.fc3(x)
         return x
 
-
-# Load CIFAR-10 dataset
-transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+# Load CIFAR-10 dataset with data augmentation
+transform = transforms.Compose([
+    transforms.RandomHorizontalFlip(),
+    transforms.RandomCrop(32, padding=4),
+    transforms.ToTensor(),
+    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+])
 trainset = torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=transform)
-trainloader = torch.utils.data.DataLoader(trainset, batch_size=4, shuffle=True, num_workers=2)
+trainloader = torch.utils.data.DataLoader(trainset, batch_size=64, shuffle=True, num_workers=2)  # Increase batch size
 
 # Initialize model, loss function, and optimizer
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = SimpleCNN().to(device)
+model = EnhancedCNN().to(device)
 criterion = nn.CrossEntropyLoss()
-optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
+optimizer = optim.Adam(model.parameters(), lr=0.001)  # Use Adam optimizer
+
+# Learning rate scheduler (optional)
+scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=7, gamma=0.1)
 
 # Train the model
-for epoch in range(2):  # loop over the dataset multiple times
+for epoch in range(10):  # Increase number of epochs
     running_loss = 0.0
+    model.train()  # Set model to training mode
     for i, data in enumerate(trainloader, 0):
         inputs, labels = data
         inputs, labels = inputs.to(device), labels.to(device)
@@ -60,11 +71,15 @@ for epoch in range(2):  # loop over the dataset multiple times
         optimizer.step()
 
         running_loss += loss.item()
-        if i % 2000 == 1999:  # print every 2000 mini-batches
-            print(f'[{epoch + 1}, {i + 1}] loss: {running_loss / 2000:.3f}')
+        if i % 100 == 99:  # Print every 100 mini-batches
+            print(f'[{epoch + 1}, {i + 1}] loss: {running_loss / 100:.3f}')
             running_loss = 0.0
 
+    # Update learning rate
+    scheduler.step()
+
 print('Finished Training')
+
 
 # Load test data
 testset = torchvision.datasets.CIFAR10(root='./data', train=False, download=True, transform=transform)
